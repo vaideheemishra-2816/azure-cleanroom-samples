@@ -2,3 +2,8 @@ bin/
 obj/
 .vs/
 *.user
+
+# Vendored CleanRoom SDKs — overrides the root .gitignore *.nupkg rule.
+# These ship with the sample so `dotnet restore` works offline against
+# the `local-cleanroom` source declared in nuget.config.
+!nupkgs/*.nupkg
