@@ -90,18 +90,46 @@ to compute an overlap analysis over their sensitive datasets.
 
 ## Step 00: SDK Setup `[ONCE]`
 
+> **Working directory.** Every command in this guide is executed from
+> **`demos/analytics-using-managedcleanroom/`** (the directory containing
+> this README). Set it once at the start of each shell:
+>
+> ```powershell
+> cd <path-to-repo>/demos/analytics-using-managedcleanroom
+> ```
+>
+> The SDK sample lives in the `csharp/` subdirectory. You don't need to
+> `cd` into it — every `dotnet run` below uses `--project csharp` so the
+> sample is built and launched from wherever you are.
+
+> **Recommended PowerShell prelude.** Drop these two lines at the top of
+> each session (or in your `$PROFILE`) so unset variables fail loudly instead
+> of being silently dropped from the next `dotnet run` argv:
+>
+> ```powershell
+> Set-StrictMode -Version Latest
+> $ErrorActionPreference = 'Stop'
+> ```
+>
+> Without these, a missing `$subscriptionId` / `$personaTokenFile` /
+> `$collabId` doesn't throw — PowerShell silently strips it from the argv
+> and the C# dispatcher surfaces it as a usage banner or
+> `IndexOutOfRangeException` three calls later.
+
 ### 0.1 Build the sample app
 
-The SDK and a runnable sample live under `csharp/` next to this guide:
+The SDK and a runnable sample live under `csharp/` next to this guide. From
+`demos/analytics-using-managedcleanroom/`:
 
 ```bash
-cd demos/analytics-using-managedcleanroom/csharp
-dotnet restore
-dotnet build -c Release
+dotnet restore csharp
+dotnet build   csharp -c Release
 ```
 
-The csproj already references the SDK from `./nupkgs/` — no external feed needed.
-See [`csharp/README.md`](csharp/README.md) for details.
+The csproj already references both SDKs from `csharp/nupkgs/` — no external
+feed needed. See [`csharp/README.md`](csharp/README.md) for details on how
+those `.nupkg` files were vendored from `azure-sdk-for-net` and how to
+refresh them.
 
 ### 0.2 Invoke the dispatcher
 
@@ -111,10 +139,10 @@ shapes:
 
 ```bash
 # Frontend (dataplane) verb — first arg is the persona JWT file
-dotnet run -- <verb> $personaTokenFile <args...>
+dotnet run --project csharp -- <verb> $personaTokenFile <args...>
 
 # ARM (management plane) verb — uses DefaultAzureCredential (no token file)
-dotnet run -- <arm-verb> <args...>
+dotnet run --project csharp -- <arm-verb> <args...>
 ```
 
 Routing is by prefix: any verb starting with `arm-` is handled by the ARM
@@ -125,14 +153,28 @@ It's a drop-in replacement for the helpers in README-API.md:
 
 ```powershell
 # Replaces:  Invoke-Frontend -Path "" -Method GET
-$collabs = dotnet run -- list-collaborations $personaTokenFile | ConvertFrom-Json
+$collabs = dotnet run --project csharp -- list-collaborations $personaTokenFile | ConvertFrom-Json
 
 # Replaces:  az rest --method GET --url $collabArmUrl... -o json
-$state = (dotnet run -- arm-show-collab $subId $collabRg $collabName | ConvertFrom-Json).ProvisioningState
+$state = (dotnet run --project csharp -- arm-show-collab $subId $collabRg $collabName | ConvertFrom-Json).ProvisioningState
 ```
 
-Run `dotnet run --` with no args for the live verb list, or see
+Run `dotnet run --project csharp --` with no args for the live verb list, or see
 [Appendix A.2](#a2-verb-catalog).
+
+> **Frontend list responses use two different envelopes.** The dispatcher
+> prints whatever the service returns; the wrapper key varies by endpoint:
+>
+> | Endpoint | Wrapper | Access via |
+> |---|---|---|
+> | `list-collaborations` | `{ "collaborations": [...] }` | `.collaborations` |
+> | `list-invitations`    | `{ "invitations": [...] }`    | `.invitations` |
+> | `list-datasets`       | `{ "value": [...] }`          | `.value` |
+> | `list-queries`        | `{ "value": [...] }`          | `.value` |
+> | `list-runs`           | `{ "value": [...] }`          | `.value` |
+>
+> If you're unsure which one a given verb uses, pipe its output through
+> `ConvertFrom-Json` and inspect the top-level keys before writing a picker.
 
 ---
 
@@ -162,7 +204,7 @@ End state:
 
 ```powershell
 cd demos/analytics-using-managedcleanroom/csharp
-dotnet run -- list-collaborations $personaTokenFile
+dotnet run --project csharp -- list-collaborations $personaTokenFile
 ```
 
 Expected: `HTTP 200` and `{"collaborations":[]}` (or your active collaborations
@@ -198,7 +240,7 @@ Replaces [README-API.md L248](README-API.md#L248) (`az rest --method PUT ...`).
 $collaboratorEmail = "<woodgrove-email>"   # or objectId=<oid> / upn=<upn>
 
 cd demos/analytics-using-managedcleanroom/csharp
-dotnet run -- arm-create-collab $subscriptionId $collabRg $collabName `
+dotnet run --project csharp -- arm-create-collab $subscriptionId $collabRg $collabName `
     $rpLocation $resourceLocation $collaboratorEmail
 ```
 
@@ -230,7 +272,7 @@ If you'd rather poll manually, run the verb with `WaitUntil.Started` semantics
 by invoking `arm-create-collab` and following up with:
 
 ```powershell
-dotnet run -- arm-wait-provisioning $subscriptionId $collabRg $collabName
+dotnet run --project csharp -- arm-wait-provisioning $subscriptionId $collabRg $collabName
 ```
 
 Replaces the poll loop in [README-API.md L265-L270](README-API.md#L265).
@@ -248,7 +290,7 @@ var state = r.Value.Data.ProvisioningState?.ToString();   // "Succeeded" | "Fail
 Replaces [README-API.md L276](README-API.md#L276) (`POST .../enableWorkload`).
 
 ```powershell
-dotnet run -- arm-enable-workload $subscriptionId $collabRg $collabName Analytics
+dotnet run --project csharp -- arm-enable-workload $subscriptionId $collabRg $collabName Analytics
 ```
 
 C# behind the verb:
@@ -264,7 +306,7 @@ await collab.EnableWorkloadAsync(
 wait for `healthState` to become `Ok`:
 
 ```powershell
-dotnet run -- arm-wait-health $subscriptionId $collabRg $collabName
+dotnet run --project csharp -- arm-wait-health $subscriptionId $collabRg $collabName
 ```
 
 Replaces the loop in [README-API.md L287-L304](README-API.md#L287).
@@ -288,7 +330,7 @@ Replaces [README-API.md L320](README-API.md#L320) (`POST .../addCollaborator`).
 ```powershell
 # Add Northwind
 $collaboratorEmail = "<northwind-email>"   # or objectId=<oid> / upn=<upn>
-dotnet run -- arm-add-collaborator $subscriptionId $collabRg $collabName $collaboratorEmail
+dotnet run --project csharp -- arm-add-collaborator $subscriptionId $collabRg $collabName $collaboratorEmail
 ```
 
 C# behind the verb:
@@ -305,7 +347,7 @@ await collab.AddCollaboratorAsync(WaitUntil.Completed, content);
 
 **Verify**:
 ```powershell
-dotnet run -- arm-show-collab $subscriptionId $collabRg $collabName
+dotnet run --project csharp -- arm-show-collab $subscriptionId $collabRg $collabName
 ```
 
 C# behind the verb: `rgRes.GetCollaborations().GetAsync(name)` — prints
@@ -321,7 +363,7 @@ Replaces [README-API.md L342](README-API.md#L342)
 (`Invoke-Frontend -Path "" -Method GET`).
 
 ```powershell
-$json = dotnet run -- list-collaborations $personaTokenFile | ConvertFrom-Json
+$json = dotnet run --project csharp -- list-collaborations $personaTokenFile | ConvertFrom-Json
 $json.collaborations | Format-Table @{L='#';E={[array]::IndexOf($json.collaborations,$_)+1}}, collaborationName, collaborationId, userStatus
 
 $choice = Read-Host "Enter the number of your collaboration"
@@ -340,11 +382,11 @@ Console.WriteLine(resp.Content.ToString());
 Replaces [README-API.md L353, L358](README-API.md#L353).
 
 ```powershell
-$invitations = (dotnet run -- list-invitations $personaTokenFile $collabId | ConvertFrom-Json).invitations
+$invitations = (dotnet run --project csharp -- list-invitations $personaTokenFile $collabId | ConvertFrom-Json).invitations
 $invitations | Format-Table invitationId, accountType, status
 
 $invitationId = $invitations[0].invitationId
-dotnet run -- accept-invitation $personaTokenFile $collabId $invitationId
+dotnet run --project csharp -- accept-invitation $personaTokenFile $collabId $invitationId
 ```
 
 C# behind the verbs:
@@ -390,7 +432,7 @@ Replaces [README-API.md L419](README-API.md#L419) (`Invoke-Frontend -Path "$coll
 ```powershell
 $jwksDir = "generated/$personaRg"
 New-Item -ItemType Directory -Path $jwksDir -Force | Out-Null
-dotnet run -- get-oidc-keys $personaTokenFile $collabId | Out-File "$jwksDir/jwks.json" -Encoding utf8
+dotnet run --project csharp -- get-oidc-keys $personaTokenFile $collabId | Out-File "$jwksDir/jwks.json" -Encoding utf8
 ```
 
 C# behind the verb:
@@ -420,7 +462,7 @@ Replaces [README-API.md L442](README-API.md#L442) (`POST .../oidc/setIssuerUrl`)
 
 ```powershell
 $issuerUrl = (Get-Content "generated/$personaRg/issuer-url.txt" -Raw).Trim()
-dotnet run -- set-issuer-url $personaTokenFile $collabId $issuerUrl
+dotnet run --project csharp -- set-issuer-url $personaTokenFile $collabId $issuerUrl
 ```
 
 C# behind the verb:
@@ -460,7 +502,7 @@ Replaces [README-API.md L487](README-API.md#L487)
 (`POST $collabId/analytics/datasets/$persona-input-csv$suffix/publish`).
 
 ```powershell
-dotnet run -- publish-dataset $personaTokenFile $collabId `
+dotnet run --project csharp -- publish-dataset $personaTokenFile $collabId `
     "$persona-input-csv$suffix" `
     "generated/publish/$persona-input-dataset.json"
 ```
@@ -471,7 +513,7 @@ Replaces [README-API.md L497](README-API.md#L497).
 
 ```powershell
 if ($persona -eq "woodgrove") {
-    dotnet run -- publish-dataset $personaTokenFile $collabId `
+    dotnet run --project csharp -- publish-dataset $personaTokenFile $collabId `
         "woodgrove-output-csv$suffix" `
         "generated/publish/woodgrove-output-dataset.json"
 }
@@ -487,7 +529,7 @@ await client.AnalyticsDatasetsDocumentIdPublishPostAsync(
 > **Consent**: To disable/enable execution consent after publish, replaces
 > [README-API.md L504](README-API.md#L504) (`PUT $collabId/consent/<docName>`):
 > ```powershell
-> dotnet run -- set-consent $personaTokenFile $collabId "<doc-name>" disable
+> dotnet run --project csharp -- set-consent $personaTokenFile $collabId "<doc-name>" disable
 > ```
 > C#: `client.ConsentDocumentIdPutAsync(collabId, doc, RequestContent.Create("{\"consentAction\":\"disable\"}"), null)`
 
@@ -505,7 +547,7 @@ if ($EncryptionMode -eq "CPK") {
 
 **Verify** (replaces [L527](README-API.md#L527)):
 ```powershell
-dotnet run -- get-dataset $personaTokenFile $collabId "$persona-input-csv$suffix"
+dotnet run --project csharp -- get-dataset $personaTokenFile $collabId "$persona-input-csv$suffix"
 ```
 
 C#: `client.AnalyticsDatasetsDocumentIdGetAsync(collabId, datasetId, context: null)`
@@ -531,7 +573,7 @@ For multi-collaborator (Northwind + Woodgrove), Woodgrove first lists
 datasets to discover Northwind's exact name:
 
 ```powershell
-$datasets = (dotnet run -- list-datasets $personaTokenFile $collabId | ConvertFrom-Json).datasets
+$datasets = (dotnet run --project csharp -- list-datasets $personaTokenFile $collabId | ConvertFrom-Json).value
 $datasets | Where-Object { $_.id -match "northwind" } | ForEach-Object { Write-Host $_.id }
 ```
 
@@ -542,7 +584,7 @@ C#: `client.AnalyticsDatasetsListGetAsync(collabId, context: null)` (replaces [R
 Replaces [README-API.md L573](README-API.md#L573).
 
 ```powershell
-dotnet run -- publish-query $personaTokenFile $collabId $queryName `
+dotnet run --project csharp -- publish-query $personaTokenFile $collabId $queryName `
     "generated/publish/$queryName.json"
 ```
 
@@ -561,13 +603,13 @@ Replaces [README-API.md L590, L596](README-API.md#L590).
 
 ```powershell
 # Inspect query & extract proposalId
-$queryInfo = dotnet run -- get-query $personaTokenFile $collabId $queryName | ConvertFrom-Json
+$queryInfo = dotnet run --project csharp -- get-query $personaTokenFile $collabId $queryName | ConvertFrom-Json
 $queryInfo.data.queryData | Format-Table executionSequence, preConditions, postFilters, data -Wrap
 $proposalId = $queryInfo.proposalId
 Write-Host "Proposal ID: $proposalId"
 
 # Vote
-dotnet run -- vote $personaTokenFile $collabId $queryName accept $proposalId
+dotnet run --project csharp -- vote $personaTokenFile $collabId $queryName accept $proposalId
 ```
 
 C# behind the verbs:
@@ -583,13 +625,13 @@ await client.AnalyticsQueriesDocumentIdVotePostAsync(
 
 **Verify state** (replaces [L611](README-API.md#L611)):
 ```powershell
-$state = (dotnet run -- get-query $personaTokenFile $collabId $queryName | ConvertFrom-Json).state
+$state = (dotnet run --project csharp -- get-query $personaTokenFile $collabId $queryName | ConvertFrom-Json).state
 Write-Host "Query state: $state"
 ```
 
 > Northwind: if you don't have `$queryName`, list published queries first —
 > ```powershell
-> dotnet run -- list-queries $personaTokenFile $collabId
+> dotnet run --project csharp -- list-queries $personaTokenFile $collabId
 > ```
 > C#: `client.AnalyticsQueriesListGetAsync(collabId, context: null)` (replaces [L602](README-API.md#L602)).
 
@@ -600,14 +642,14 @@ Write-Host "Query state: $state"
 Replaces [README-API.md L621](README-API.md#L621).
 
 ```powershell
-$jobId = (dotnet run -- run-query $personaTokenFile $collabId $queryName | ConvertFrom-Json).id
+$jobId = (dotnet run --project csharp -- run-query $personaTokenFile $collabId $queryName | ConvertFrom-Json).id
 Write-Host "Job ID: $jobId"
 ```
 
 With date-range filter (replaces [L640](README-API.md#L640)):
 
 ```powershell
-$jobId = (dotnet run -- run-query $personaTokenFile $collabId $queryName 2025-09-01 2025-09-02 | ConvertFrom-Json).id
+$jobId = (dotnet run --project csharp -- run-query $personaTokenFile $collabId $queryName 2025-09-01 2025-09-02 | ConvertFrom-Json).id
 ```
 
 C# behind the verb:
@@ -632,7 +674,7 @@ The CLI verb returns the current state in one shot; loop in PowerShell:
 
 ```powershell
 do {
-    $result = dotnet run -- poll-run $personaTokenFile $collabId $jobId | ConvertFrom-Json
+    $result = dotnet run --project csharp -- poll-run $personaTokenFile $collabId $jobId | ConvertFrom-Json
     $state  = $result.status.applicationState.state
     Write-Host "[$(Get-Date -Format 'HH:mm:ss')] State: $state"
     Start-Sleep -Seconds 30
@@ -669,7 +711,7 @@ reaches a terminal state.
 Replaces [README-API.md L691](README-API.md#L691).
 
 ```powershell
-dotnet run -- list-runs $personaTokenFile $collabId $queryName | ConvertFrom-Json | ConvertTo-Json -Depth 10
+dotnet run --project csharp -- list-runs $personaTokenFile $collabId $queryName | ConvertFrom-Json | ConvertTo-Json -Depth 10
 ```
 
 C#: `client.AnalyticsQueriesDocumentIdRunsGetAsync(collabId, queryName, context: null)`.
@@ -679,7 +721,7 @@ C#: `client.AnalyticsQueriesDocumentIdRunsGetAsync(collabId, queryName, context:
 Replaces [README-API.md L700](README-API.md#L700).
 
 ```powershell
-dotnet run -- audit $personaTokenFile $collabId | ConvertFrom-Json | ConvertTo-Json -Depth 10
+dotnet run --project csharp -- audit $personaTokenFile $collabId | ConvertFrom-Json | ConvertTo-Json -Depth 10
 ```
 
 C#:
@@ -707,7 +749,7 @@ Response audit = await client.AnalyticsAuditeventsGetAsync(
 Replaces [README-API.md L725](README-API.md#L725) (`POST .../getReadonlyKubeConfig`).
 
 ```powershell
-dotnet run -- arm-get-kubeconfig $subscriptionId $collabRg $collabName ./readonly.kubeconfig
+dotnet run --project csharp -- arm-get-kubeconfig $subscriptionId $collabRg $collabName ./readonly.kubeconfig
 
 ./scripts/12-open-grafana-dashboard.ps1 -KubeConfigPath "./readonly.kubeconfig"
 ```
@@ -737,7 +779,7 @@ implements every verb used in Steps 02–12, across both planes.
 
 ```
                  ┌───────────────────────────┐
-  dotnet run -- ──▶ args[0] starts with "arm-"? ──┐
+  dotnet run --project csharp -- ──▶ args[0] starts with "arm-"? ──┐
                  └───────────────────────────┘     │
                             │ yes              │ no
                             ▼                  ▼
@@ -848,7 +890,7 @@ static async Task<int> RunArmAsync(string verb, string[] a)
 ```
 
 > **Build**: from `csharp/`, run `dotnet build -c Release`.
-> **Run**: `dotnet run -- <verb> [args...]`.
+> **Run**: `dotnet run --project csharp -- <verb> [args...]`.
 
 ---
 
@@ -1028,7 +1070,7 @@ If the collaboration becomes unresponsive (e.g., `ContractNotFound`, frontend
 errors on all operations):
 
 ```powershell
-dotnet run -- arm-recover-collab $subscriptionId $collabRg $collabName
+dotnet run --project csharp -- arm-recover-collab $subscriptionId $collabRg $collabName
 ```
 
 C# behind the verb:
@@ -1046,7 +1088,7 @@ await collab.RecoverAsync(WaitUntil.Completed,
 ### E.2 Delete Collaboration
 
 ```powershell
-dotnet run -- arm-delete-collab $subscriptionId $collabRg $collabName
+dotnet run --project csharp -- arm-delete-collab $subscriptionId $collabRg $collabName
 ```
 
 C# behind the verb:
